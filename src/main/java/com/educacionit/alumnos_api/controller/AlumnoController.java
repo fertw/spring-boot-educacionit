@@ -115,6 +115,23 @@ public class AlumnoController {
 		}
 		return ResponseEntity.ok(alu);
 	}
+	
+	@GetMapping("/buscar")
+	public ResponseEntity<List<Alumno>> buscar(
+	        @RequestParam(value = "nombre", required = false) String nombre,
+	        @RequestParam(value = "apellido", required = false) String apellido,
+	        @RequestParam(value = "dni", required = false) String dni,
+	        @RequestParam(value = "legajo", required = false) String legajo) {
+
+	    List<Alumno> resultado = alumnos.stream()
+	            .filter(a -> nombre == null || a.getNombre().equalsIgnoreCase(nombre))
+	            .filter(a -> apellido == null || a.getApellido().equalsIgnoreCase(apellido))
+	            .filter(a -> dni == null || a.getDni().equals(dni))
+	            .filter(a -> legajo == null || a.getLegajo().equals(legajo))
+	            .toList();
+
+	    return ResponseEntity.ok(resultado);
+	}
 
 	@GetMapping("/dni/{dni}")
 	public Alumno buscarPorDni(@PathVariable("dni") String dni) {
