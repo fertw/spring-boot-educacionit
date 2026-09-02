@@ -2,7 +2,7 @@
 
 API REST desarrollada con Spring Boot como parte del curso **Java Spring Boot** de EducaciónIT. El proyecto evoluciona clase a clase; cada clase queda marcada con un tag (`clase-1`, `clase-2`, …) para poder partir del estado exacto de cada encuentro.
 
-Este commit corresponde a la **Clase 3 — API REST (parte 2): CRUD completo y ResponseEntity**: el recurso `Alumno` pasa a exponer el CRUD completo (`GET`, `POST`, `PUT`, `PATCH`, `DELETE`) con status codes explícitos vía `ResponseEntity<T>`.
+Este commit corresponde a la **Clase 4 — Inyección de dependencias y arquitectura en capas**: el proyecto se reorganiza en `Controller → Service → Repository`, con Spring creando y conectando los objetos por inyección de dependencias, y DTOs con `records` de Java separando lo que se expone de lo que se guarda.
 
 ## Requisitos
 
@@ -17,7 +17,7 @@ Este commit corresponde a la **Clase 3 — API REST (parte 2): CRUD completo y R
    ```bash
    git clone https://github.com/fertw/spring-boot-educacionit.git
    ```
-2. Para ubicarse en el estado de una clase: `git checkout clase-3`.
+2. Para ubicarse en el estado de una clase: `git checkout clase-4`.
 3. Importar en Eclipse como **Existing Maven Project** (`File > Import > Maven > Existing Maven Projects`), seleccionando la carpeta `alumnos-api`.
 4. Esperar a que Eclipse descargue las dependencias definidas en `pom.xml`.
 5. Ejecutar la clase principal `AlumnosApiApplication` como **Spring Boot App** (o `Java Application`).
@@ -45,36 +45,36 @@ También se puede correr desde la terminal con el wrapper de Maven:
 
 ```
 src/main/java/com/educacionit/alumnos_api/
-├── AlumnosApiApplication.java      ← clase main (@SpringBootApplication)
+├── AlumnosApiApplication.java          ← clase main (@SpringBootApplication)
 ├── controller/
-│   ├── HolaController.java         ← endpoints de la Clase 1
-│   └── AlumnoController.java       ← recurso /alumnos (Clase 2, CRUD completo en Clase 3)
+│   └── AlumnoController.java           ← recurso /alumnos, delega toda la lógica en AlumnoService
+├── service/
+│   └── AlumnoService.java              ← reglas de negocio, orquesta el repository
+├── repository/
+│   ├── AlumnoRepository.java           ← interfaz: contrato de persistencia
+│   └── AlumnoRepositoryEnMemoria.java  ← @Repository, implementación con List en memoria
+├── dto/
+│   ├── AlumnoRequest.java              ← record: lo que llega en el body de POST/PUT (sin id)
+│   └── AlumnoResponse.java             ← record: lo que se devuelve al cliente
 └── model/
-    └── Alumno.java                 ← POJO: id, nombre, apellido, dni, legajo
+    └── Alumno.java                     ← POJO interno: id, nombre, apellido, dni, legajo
 ```
 
-Los alumnos viven en una `List<Alumno>` dentro del controlador, con tres registros de prueba cargados al iniciar (Ana Gomez, Bruno Diaz, Carla Gomez). Se pierden al reiniciar: la persistencia llega en la Clase 5.
+`HolaController` (los endpoints sueltos de la Clase 1) se eliminó: ya cumplió su propósito como primer contacto con Spring MVC.
+
+Los alumnos viven en una `List<Alumno>` dentro de `AlumnoRepositoryEnMemoria`. Se pierden al reiniciar: la persistencia real llega en la Clase 5.
 
 ## Endpoints disponibles
-
-### Clase 1
-
-| Método | Ruta        | Devuelve                                              |
-|--------|-------------|-------------------------------------------------------|
-| GET    | `/hola`     | Texto plano: `"Hola Mundo"`                           |
-| GET    | `/curso`    | JSON (`Map<String,String>`) con información del curso |
-| GET    | `/modulos`  | Información sobre los módulos del curso               |
-| GET    | `/duracion` | Información sobre la duración del curso               |
 
 ### Clase 2 — recurso `/alumnos`
 
 | Método | Ruta                                  | Qué hace                                  | Status |
 |--------|---------------------------------------|-------------------------------------------|--------|
 | GET    | `/alumnos`                            | Lista todos los alumnos                   | 200    |
-| GET    | `/alumnos?apellido=Gomez`             | Filtra por apellido (opcional)            | 200    |
 | GET    | `/alumnos/{id}`                       | Un alumno por id                          | 200 · 404 si no existe |
 | GET    | `/alumnos/legajo/{legajo}`            | Un alumno por legajo                      | 200 · 404 si no existe |
-| GET    | `/alumnos/buscar?nombre=X&apellido=Y` | Búsqueda por ambos (los dos obligatorios) | 200 · 400 si falta alguno |
+| GET    | `/alumnos/dni/{dni}`                  | Un alumno por dni                         | 200 · 404 si no existe |
+| GET    | `/alumnos/buscar?nombre=X&apellido=Y&dni=Z&legajo=W` | Búsqueda por cualquier combinación de filtros (todos opcionales) | 200 |
 | POST   | `/alumnos`                            | Crea un alumno (el id lo asigna el servidor) | 201 |
 
 Ejemplo de alta:
@@ -146,9 +146,38 @@ Location: http://localhost:9080/alumnos/6
 |-------------------------------------------------------------|----------------|
 | `POST /alumnos` con `{}` crea un alumno de puros `null`     | Clase 6 (Bean Validation) |
 | Los datos se pierden al reiniciar                            | Clase 5 (Spring Data JPA + H2) |
-| La lista vive dentro del controlador                         | Clase 4 (capas: Service / Repository) |
 | **Laboratorio 1 pendiente**: `Materia`, `Alumno.materias` y `CarreraController` (`GET /carreras`, `GET /carreras/{codigo}`) | Tarea / próxima clase |
+
+## Temario de la Clase 4
+
+El objetivo de la clase fue puertas adentro: reordenar la misma API en capas sin agregar endpoints nuevos. Contra Postman, el proyecto responde igual que al final de la Clase 3 (mismos status codes); lo único visible es que el JSON de salida nunca trae campos fuera del DTO.
+
+- **Por qué separar en capas**: hasta la Clase 3, `AlumnoController` mezclaba HTTP, reglas de negocio y datos (lista + `AtomicLong`). Eso complica testear la lógica sin levantar un servidor y acopla el proyecto a que los datos vivan en memoria.
+- **Arquitectura en capas** (variante de MVC para una API, sin vista):
+
+  | Capa | Responsabilidad |
+  |---|---|
+  | `Controller` | Recibe el HTTP, valida la forma del pedido, delega y arma la respuesta |
+  | `Service` | Reglas de negocio, orquesta las operaciones — no sabe nada de HTTP |
+  | `Repository` | Acceso a los datos — hoy en memoria, en la Clase 5 con JPA |
+
+- **Inversión de Control (IoC) e inyección de dependencias**: sin IoC cada clase crea sus dependencias con `new` (acoplamiento fuerte); con IoC el contenedor de Spring (`ApplicationContext`) crea los objetos y los conecta. Un **bean** es cualquier objeto administrado por ese contenedor, con scope `singleton` por defecto (una sola instancia por contenedor). `@ComponentScan` es lo que hace que el paquete del `Controller` tenga que colgar del paquete del `main` — ahí empieza el escaneo de beans.
+- **Estereotipos de Spring**: `@Component` (genérico) y sus especializaciones `@Repository` (acceso a datos), `@Service` (lógica de negocio) y `@Controller`/`@RestController` (expone HTTP). Para beans de clases que no son propias (de una librería externa) se usan `@Bean` + `@Configuration` en vez de anotar la clase.
+- **Inyección por constructor**: `AlumnoController` recibe un `AlumnoService`, y `AlumnoService` recibe un `AlumnoRepository`, ambos como campos `final`. Con un solo constructor no hace falta `@Autowired` — Spring lo detecta solo. Se prefiere sobre `@Autowired` en campo porque la dependencia queda obligatoria desde que el objeto existe (sin `null`) y es más fácil de testear.
+- **Programar contra una interfaz**: `AlumnoRepository` declara el contrato (el *qué*); `AlumnoRepositoryEnMemoria` es la única implementación por ahora y guarda el estado (el *cómo* — la lista y el `AtomicLong`), por eso `@Repository` va en la implementación y no en la interfaz. El `Service` depende de la interfaz, no de la implementación concreta — así en la Clase 5 se puede cambiar la lista en memoria por Spring Data JPA sin tocar una línea del `Service` ni del `Controller`.
+- **DTOs con `record`**: `AlumnoRequest` (lo que entra en `POST`/`PUT`, sin `id` — lo genera el server) y `AlumnoResponse` (lo que sale) separan el contrato de la API del modelo interno `Alumno`. `toModel()` convierte el DTO de entrada al modelo; `AlumnoResponse.fromModel(...)` hace el camino inverso. Jackson deserializa `record` sin configuración extra.
+- **Ver la inyección de dependencias fallar en vivo**: comentar `@Repository` en `AlumnoRepositoryEnMemoria` y arrancar la app tira `UnsatisfiedDependencyException: No qualifying bean of type 'AlumnoRepository' available` — Spring dice exactamente qué bean faltó y dónde lo necesitaba.
+- **Limpieza de código muerto**: se eliminó `HolaController` (ya cumplió su función como primer contacto con Spring MVC) y un método `@GetMapping("/buscar")` duplicado que había quedado en el `Controller` de la Clase 3 (dos handlers para la misma ruta — Spring ni siquiera arrancaba con eso).
+- **`GET /alumnos/dni/{dni}`** pasa a usar `ResponseEntity<AlumnoResponse>` con `404` si no existe, en vez de devolver el objeto (o `null`) directo como en clases anteriores.
+
+### Errores frecuentes de este refactor
+
+- Poner la lista de alumnos en la interfaz en vez de la implementación (Java ni permite un campo de instancia mutable en una interfaz).
+- Refactor a DTO a medias: algún método del controller sigue devolviendo `Alumno` en vez de `AlumnoResponse`.
+- Perder un endpoint al reescribir el controller a mano.
+- `@GetMapping` duplicado en dos métodos → la app no arranca por mapping ambiguo.
+- Volver al "200 con `null`": un método que devuelve el tipo directo (no `ResponseEntity<T>`) y no encuentra el recurso responde `200` con body vacío en lugar de `404`.
 
 ## Próxima clase
 
-**Clase 4 — Inyección de dependencias y arquitectura en capas.** La misma API, reorganizada en capas `Controller → Service → Repository`, con Spring creando y conectando los objetos por inyección de dependencias, y DTOs con `records` de Java separando lo que se expone de lo que se guarda.
+**Clase 5 — Persistencia con Spring Data JPA y H2.** La interfaz `AlumnoRepository` se reemplaza por `JpaRepository<Alumno, Long>` contra una base H2 en memoria (con consola web en `/h2-console`); `Alumno` pasa a ser `@Entity`. Gracias a que el `Service` depende de la interfaz y no de la implementación, el `Service` y el `Controller` no cambian. Tarea: aplicar el mismo refactor de capas (repository + service + DTOs) a `Materia`.

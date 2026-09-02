@@ -1,10 +1,8 @@
 package com.educacionit.alumnos_api.controller;
 
 import java.net.URI;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,129 +17,97 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 import org.springframework.http.ResponseEntity;
 
+import com.educacionit.alumnos_api.dto.AlumnoRequest;
+import com.educacionit.alumnos_api.dto.AlumnoResponse;
 import com.educacionit.alumnos_api.model.Alumno;
+import com.educacionit.alumnos_api.service.AlumnoService;
 
 @RestController
 @RequestMapping("/alumnos")
 public class AlumnoController {
 
-	private final List<Alumno> alumnos = new ArrayList<>();
-	private final AtomicLong counter = new AtomicLong();
+	private final AlumnoService alumnoService;
 
-	public AlumnoController() {
-		// Agregar algunos alumnos de ejemplo
-		alumnos.add(new Alumno(counter.incrementAndGet(), "Juan", "Pérez", "12345678", "A001"));
-		alumnos.add(new Alumno(counter.incrementAndGet(), "María", "Gómez", "87654321", "A002"));
+	public AlumnoController(AlumnoService alumnoService) {
+		this.alumnoService = alumnoService;
+	}
+
+	@GetMapping
+	public ResponseEntity<List<AlumnoResponse>> listar() {
+		List<AlumnoResponse> respuesta = alumnoService.listar().stream()
+				.map(AlumnoResponse::fromModel)
+				.toList();
+		return ResponseEntity.ok(respuesta);
+	}
+
+	@GetMapping("/{id}")
+	public ResponseEntity<AlumnoResponse> buscarPorId(@PathVariable("id") Long id) {
+		return alumnoService.buscarPorId(id)
+				.map(AlumnoResponse::fromModel)
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	@GetMapping("/legajo/{legajo}")
+	public ResponseEntity<AlumnoResponse> buscarPorLegajo(@PathVariable("legajo") String legajo) {
+		return alumnoService.buscarPorLegajo(legajo)
+				.map(AlumnoResponse::fromModel)
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	@GetMapping("/dni/{dni}")
+	public ResponseEntity<AlumnoResponse> buscarPorDni(@PathVariable("dni") String dni) {
+		return alumnoService.buscarPorDni(dni)
+				.map(AlumnoResponse::fromModel)
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
+	}
+
+	@GetMapping("/buscar")
+	public ResponseEntity<List<AlumnoResponse>> buscar(
+			@RequestParam(value = "nombre", required = false) String nombre,
+			@RequestParam(value = "apellido", required = false) String apellido,
+			@RequestParam(value = "dni", required = false) String dni,
+			@RequestParam(value = "legajo", required = false) String legajo) {
+		List<AlumnoResponse> respuesta = alumnoService.buscar(nombre, apellido, dni, legajo).stream()
+				.map(AlumnoResponse::fromModel)
+				.toList();
+		return ResponseEntity.ok(respuesta);
 	}
 
 	@PostMapping
-	public ResponseEntity<Alumno> crear(@RequestBody Alumno alumno) {
-		alumno.setId(counter.incrementAndGet());
-		alumnos.add(alumno);		
-		
+	public ResponseEntity<AlumnoResponse> crear(@RequestBody AlumnoRequest alumno) {
+		Alumno alumnoCreado = alumnoService.crear(alumno.toModel());
 		URI ubicacion = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}")
-				.buildAndExpand(alumno.getId()).toUri();
-		return ResponseEntity.created(ubicacion).body(alumno);
+				.buildAndExpand(alumnoCreado.getId()).toUri();
+		return ResponseEntity.created(ubicacion).body(AlumnoResponse.fromModel(alumnoCreado));
 	}
 
 	@PutMapping("/{id}")
-	public ResponseEntity<Alumno> actualizar(@PathVariable("id") Long id, @RequestBody Alumno alumno) {
-	    Alumno alumnoExistente = alumnos.stream()
-	        .filter(a -> a.getId().equals(id))
-	        .findFirst()
-	        .orElse(null);
-
-	    if (alumnoExistente == null) {
-	        return ResponseEntity.notFound().build();
-	    }
-
-	    alumnoExistente.setNombre(alumno.getNombre());
-	    alumnoExistente.setApellido(alumno.getApellido());
-	    alumnoExistente.setDni(alumno.getDni());
-	    alumnoExistente.setLegajo(alumno.getLegajo());
-	    return ResponseEntity.ok(alumnoExistente);
+	public ResponseEntity<AlumnoResponse> actualizar(@PathVariable("id") Long id, @RequestBody AlumnoRequest alumno) {
+		return alumnoService.actualizar(id, alumno.toModel())
+				.map(AlumnoResponse::fromModel)
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
 	}
-	
+
 	@PatchMapping("/{id}")
-	public ResponseEntity<Alumno> actualizarApellido(@PathVariable("id") Long id, @RequestBody Map<String, String> cambios) {
-	    Alumno alumnoExistente = alumnos.stream()
-	        .filter(a -> a.getId().equals(id))
-	        .findFirst()
-	        .orElse(null);
-
-	    if (alumnoExistente == null) {
-	        return ResponseEntity.notFound().build();
-	    }
-
-	    String nuevoApellido = cambios.get("apellido");
-	    if (nuevoApellido == null) {
-	        return ResponseEntity.badRequest().build();
-	    }
-
-	    alumnoExistente.setApellido(nuevoApellido);
-	    return ResponseEntity.ok(alumnoExistente);
+	public ResponseEntity<AlumnoResponse> actualizarApellido(@PathVariable("id") Long id, @RequestBody Map<String, String> cambios) {
+		String nuevoApellido = cambios.get("apellido");
+		if (nuevoApellido == null) {
+			return ResponseEntity.badRequest().build();
+		}
+		return alumnoService.actualizarApellido(id, nuevoApellido)
+				.map(AlumnoResponse::fromModel)
+				.map(ResponseEntity::ok)
+				.orElse(ResponseEntity.notFound().build());
 	}
 
 	@DeleteMapping("/{id}")
 	public ResponseEntity<Void> eliminar(@PathVariable("id") Long id) {
-		boolean borrado = alumnos.removeIf(a -> a.getId().equals(id));
-		if (!borrado) {
-			return ResponseEntity.notFound().build();
-		}
-		return ResponseEntity.noContent().build();
+		return alumnoService.eliminar(id)
+				? ResponseEntity.noContent().build()
+				: ResponseEntity.notFound().build();
 	}
-
-	@GetMapping
-	public ResponseEntity<List<Alumno>> listar() {
-		return ResponseEntity.ok(alumnos);
-	}
-
-	@GetMapping("/{id}")
-	public ResponseEntity<Alumno> buscarPorId(@PathVariable("id") Long id) {
-		boolean alumnoExistente = alumnos.stream().anyMatch(alumno -> alumno.getId().equals(id));
-		if (!alumnoExistente) {
-			return ResponseEntity.notFound().build();
-		}
-		Alumno alumno = alumnos.stream().filter(a -> a.getId().equals(id)).findFirst().orElse(null);
-		return ResponseEntity.ok(alumno);
-	}
-		
-
-	@GetMapping("/legajo/{legajo}")
-	public ResponseEntity<Alumno> buscarPorLegajo(@PathVariable("legajo") String legajo) {
-		Alumno alu = alumnos.stream().filter(alumno -> alumno.getLegajo().equals(legajo)).findFirst().orElse(null);
-		if (alu == null) {
-			return ResponseEntity.notFound().build();
-		}
-		return ResponseEntity.ok(alu);
-	}
-	
-	@GetMapping("/buscar")
-	public ResponseEntity<List<Alumno>> buscar(
-	        @RequestParam(value = "nombre", required = false) String nombre,
-	        @RequestParam(value = "apellido", required = false) String apellido,
-	        @RequestParam(value = "dni", required = false) String dni,
-	        @RequestParam(value = "legajo", required = false) String legajo) {
-
-	    List<Alumno> resultado = alumnos.stream()
-	            .filter(a -> nombre == null || a.getNombre().equalsIgnoreCase(nombre))
-	            .filter(a -> apellido == null || a.getApellido().equalsIgnoreCase(apellido))
-	            .filter(a -> dni == null || a.getDni().equals(dni))
-	            .filter(a -> legajo == null || a.getLegajo().equals(legajo))
-	            .toList();
-
-	    return ResponseEntity.ok(resultado);
-	}
-
-	@GetMapping("/dni/{dni}")
-	public Alumno buscarPorDni(@PathVariable("dni") String dni) {
-		return alumnos.stream().filter(alumno -> alumno.getDni().equals(dni)).findFirst().orElse(null);
-	}
-
-	@GetMapping("/buscar")
-	public List<Alumno> buscar(@RequestParam("nombre") String nombre, @RequestParam("apellido") String apellido) {
-		return alumnos.stream().filter(alumno -> alumno.getNombre().equalsIgnoreCase(nombre)
-				&& alumno.getApellido().equalsIgnoreCase(apellido)).toList();
-	}
-
 }
