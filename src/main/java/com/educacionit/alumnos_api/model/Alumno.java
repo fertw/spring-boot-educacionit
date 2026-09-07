@@ -1,12 +1,37 @@
 package com.educacionit.alumnos_api.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.JoinColumn;
+
+
+@Entity
 public class Alumno {
 
+	@Id
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 	private String nombre;
 	private String apellido;
 	private String dni;
 	private String legajo;
+	
+	@ManyToMany (fetch = FetchType.LAZY, cascade = CascadeType.MERGE)
+	@JoinTable(
+		    name = "alumno_materia",
+		    joinColumns = @JoinColumn(name = "alumno_id"),
+		    inverseJoinColumns = @JoinColumn(name = "materia_id")
+		)
+	private List<Materia> materias = new ArrayList<>();
 
 	public Alumno() {
 		super();
@@ -60,6 +85,14 @@ public class Alumno {
 
 	public void setLegajo(String legajo) {
 		this.legajo = legajo;
+	}
+	
+	public List<Materia> getMaterias() {
+		return materias;
+	}
+	
+	public void setMaterias(List<Materia> materias) {
+		this.materias = materias;
 	}
 
 }

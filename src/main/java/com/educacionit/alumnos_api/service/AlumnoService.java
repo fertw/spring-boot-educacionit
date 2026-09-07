@@ -2,21 +2,23 @@ package com.educacionit.alumnos_api.service;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.stream.Stream;
 
-import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 
 import com.educacionit.alumnos_api.model.Alumno;
+import com.educacionit.alumnos_api.model.Materia;
 import com.educacionit.alumnos_api.repository.AlumnoRepository;
+import com.educacionit.alumnos_api.repository.MateriaRepository;
 
 @Service
 public class AlumnoService {
 	
 	private final AlumnoRepository alumnoRepository;
+	private final MateriaRepository materiaRepository;
 	
-	public AlumnoService(AlumnoRepository alumnoRepository) {
+	public AlumnoService(AlumnoRepository alumnoRepository, MateriaRepository materiaRepository) {
 		this.alumnoRepository = alumnoRepository;
+		this.materiaRepository = materiaRepository;
 	}
 	
 	public List<Alumno> listar() {
@@ -72,6 +74,22 @@ public class AlumnoService {
 		return alumnoRepository.findAll().stream()
 				.filter(alumno -> alumno.getLegajo().equalsIgnoreCase(legajo))
 				.findFirst();
+	}
+	
+	public Alumno inscribirEnMateria(Long alumnoId, Long materiaId) {
+	    Alumno alumno = alumnoRepository.findById(alumnoId)
+	        .orElseThrow(() -> new RuntimeException("Alumno no encontrado"));
+	    Materia materia = materiaRepository.findById(materiaId)
+	        .orElseThrow(() -> new RuntimeException("Materia no encontrada"));
+
+	    alumno.getMaterias().add(materia);
+	    return alumnoRepository.save(alumno);
+	}
+
+	public List<Materia> obtenerMateriasDeAlumno(Long alumnoId) {
+	    Alumno alumno = alumnoRepository.findById(alumnoId)
+	        .orElseThrow(() -> new RuntimeException("Alumno no encontrado"));
+	    return alumno.getMaterias();
 	}
 
 }

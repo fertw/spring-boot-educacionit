@@ -2,7 +2,7 @@
 
 API REST desarrollada con Spring Boot como parte del curso **Java Spring Boot** de EducaciónIT. El proyecto evoluciona clase a clase; cada clase queda marcada con un tag (`clase-1`, `clase-2`, …) para poder partir del estado exacto de cada encuentro.
 
-Este commit corresponde a la **Clase 4 — Inyección de dependencias y arquitectura en capas**: el proyecto se reorganiza en `Controller → Service → Repository`, con Spring creando y conectando los objetos por inyección de dependencias, y DTOs con `records` de Java separando lo que se expone de lo que se guarda.
+Este commit corresponde a la **Clase 5 — Spring Data JPA (parte 1): persistencia**: la lista en memoria se reemplaza por una base H2 real, con `AlumnoRepository` extendiendo `JpaRepository` (Spring genera la implementación) y `Alumno` convertido en `@Entity`. Como adelanto de la Clase 6 se agrega la relación `@ManyToMany` entre `Alumno` y `Materia`, con dos endpoints de inscripción.
 
 ## Requisitos
 
@@ -17,7 +17,7 @@ Este commit corresponde a la **Clase 4 — Inyección de dependencias y arquitec
    ```bash
    git clone https://github.com/fertw/spring-boot-educacionit.git
    ```
-2. Para ubicarse en el estado de una clase: `git checkout clase-4`.
+2. Para ubicarse en el estado de una clase: `git checkout clase-5`.
 3. Importar en Eclipse como **Existing Maven Project** (`File > Import > Maven > Existing Maven Projects`), seleccionando la carpeta `alumnos-api`.
 4. Esperar a que Eclipse descargue las dependencias definidas en `pom.xml`.
 5. Ejecutar la clase principal `AlumnosApiApplication` como **Spring Boot App** (o `Java Application`).
@@ -38,7 +38,7 @@ También se puede correr desde la terminal con el wrapper de Maven:
 | Spring Boot | `4.0.x`                      |
 | Java        | `21`                         |
 | Build tool  | Maven                        |
-| Dependencia | `spring-boot-starter-webmvc` |
+| Dependencias | `spring-boot-starter-webmvc`, `spring-boot-starter-data-jpa`, `h2`, `spring-boot-h2console` |
 | Puerto      | `9080`                       |
 
 ## Estructura
@@ -47,22 +47,39 @@ También se puede correr desde la terminal con el wrapper de Maven:
 src/main/java/com/educacionit/alumnos_api/
 ├── AlumnosApiApplication.java          ← clase main (@SpringBootApplication)
 ├── controller/
-│   └── AlumnoController.java           ← recurso /alumnos, delega toda la lógica en AlumnoService
+│   └── AlumnoController.java           ← recurso /alumnos (+ inscripción a materias), delega en AlumnoService
 ├── service/
-│   └── AlumnoService.java              ← reglas de negocio, orquesta el repository
+│   └── AlumnoService.java              ← reglas de negocio, orquesta AlumnoRepository y MateriaRepository
 ├── repository/
-│   ├── AlumnoRepository.java           ← interfaz: contrato de persistencia
-│   └── AlumnoRepositoryEnMemoria.java  ← @Repository, implementación con List en memoria
+│   ├── AlumnoRepository.java           ← extends JpaRepository<Alumno, Long> — sin implementación propia
+│   └── MateriaRepository.java          ← extends JpaRepository<Materia, Long>
 ├── dto/
 │   ├── AlumnoRequest.java              ← record: lo que llega en el body de POST/PUT (sin id)
 │   └── AlumnoResponse.java             ← record: lo que se devuelve al cliente
 └── model/
-    └── Alumno.java                     ← POJO interno: id, nombre, apellido, dni, legajo
+    ├── Alumno.java                     ← @Entity: id, nombre, apellido, dni, legajo, materias (@ManyToMany)
+    └── Materia.java                    ← @Entity: id, nombre, codigo
+
+src/main/resources/
+├── application.properties              ← datasource H2, ddl-auto, show-sql, consola web
+└── data.sql                            ← alumnos de arranque (se ejecuta después de que Hibernate crea las tablas)
 ```
 
-`HolaController` (los endpoints sueltos de la Clase 1) se eliminó: ya cumplió su propósito como primer contacto con Spring MVC.
+`AlumnoRepositoryEnMemoria` (la `List` + `AtomicLong` de la Clase 4) se eliminó: `JpaRepository` la reemplaza por completo. `AlumnoService` y `AlumnoController` no cambiaron para hacer ese reemplazo — solo suman lo nuevo de materias.
 
-Los alumnos viven en una `List<Alumno>` dentro de `AlumnoRepositoryEnMemoria`. Se pierden al reiniciar: la persistencia real llega en la Clase 5.
+Hibernate crea las tablas `alumno`, `materia` y `alumno_materia` al arrancar (`ddl-auto=update`). Los datos viven en H2 en memoria: sobreviven mientras el proceso corre y se pierden al reiniciar, salvo lo que recargue `data.sql`.
+
+### Consola web de H2
+
+Con la app corriendo, entrar a `http://localhost:9080/h2-console` y conectarse con:
+
+| Campo    | Valor                   |
+|----------|-------------------------|
+| JDBC URL | `jdbc:h2:mem:alumnosdb` |
+| User     | `sa`                    |
+| Password | (vacía)                 |
+
+> El formulario trae por defecto `jdbc:h2:~/test`, que apunta a un archivo inexistente y da `Database not found`. Hay que reemplazarlo por la URL de arriba, la misma del `application.properties`.
 
 ## Endpoints disponibles
 
@@ -114,6 +131,20 @@ HTTP/1.1 201
 Location: http://localhost:9080/alumnos/6
 ```
 
+### Clase 5 — inscripción a materias
+
+| Método | Ruta                                | Qué hace                                         | Status |
+|--------|-------------------------------------|--------------------------------------------------|--------|
+| POST   | `/alumnos/{id}/materias/{materiaId}` | Inscribe al alumno en la materia                 | 200 · 500 si alumno o materia no existen (ver deudas) |
+| GET    | `/alumnos/{id}/materias`            | Lista las materias en las que está inscripto     | 200 · 500 si el alumno no existe |
+
+```bash
+curl -X POST http://localhost:9080/alumnos/1/materias/1
+curl http://localhost:9080/alumnos/1/materias
+```
+
+> El `RuntimeException` genérico del service es provisorio: las excepciones propias con `404`/`409` llegan en la Clase 7 con `@RestControllerAdvice`.
+
 ## Temario de la Clase 2
 
 - **API y REST**: recursos identificados por URIs, representaciones en JSON, verbos HTTP para las operaciones, servicios sin estado (*stateless*), interfaz uniforme.
@@ -145,8 +176,8 @@ Location: http://localhost:9080/alumnos/6
 | Problema                                                   | Se resuelve en |
 |-------------------------------------------------------------|----------------|
 | `POST /alumnos` con `{}` crea un alumno de puros `null`     | Clase 6 (Bean Validation) |
-| Los datos se pierden al reiniciar                            | Clase 5 (Spring Data JPA + H2) |
-| **Laboratorio 1 pendiente**: `Materia`, `Alumno.materias` y `CarreraController` (`GET /carreras`, `GET /carreras/{codigo}`) | Tarea / próxima clase |
+| Los datos se pierden al reiniciar                            | ✅ Clase 5 (Spring Data JPA + H2) |
+| **Laboratorio 1 pendiente**: `Materia`, `Alumno.materias` y `CarreraController` (`GET /carreras`, `GET /carreras/{codigo}`) | `Materia` y `Alumno.materias` ✅ Clase 5 · `CarreraController` pendiente |
 
 ## Temario de la Clase 4
 
@@ -178,6 +209,96 @@ El objetivo de la clase fue puertas adentro: reordenar la misma API en capas sin
 - `@GetMapping` duplicado en dos métodos → la app no arranca por mapping ambiguo.
 - Volver al "200 con `null`": un método que devuelve el tipo directo (no `ResponseEntity<T>`) y no encuentra el recurso responde `200` con body vacío en lugar de `404`.
 
+## Temario de la Clase 5
+
+Objetivo: que los alumnos sobrevivan al reinicio de la aplicación. Se reemplaza la lista en memoria por una base H2 real, con `JpaRepository` generando el repositorio automáticamente. Como adelanto, se arma también la relación `@ManyToMany` entre `Alumno` y `Materia` (tema oficialmente de la Clase 6, pero salió en la práctica de esta clase).
+
+- **El problema del mapeo objeto-relacional**: un objeto tiene referencias a otros objetos (un `Alumno` con una lista de `Materia`); una tabla relacional resuelve eso con claves foráneas y tablas intermedias. Un **ORM** es la capa que traduce objetos a filas y filas a objetos automáticamente.
+- **JPA, Hibernate y Spring Data JPA**: JPA es la especificación (interfaces y anotaciones); Hibernate es la implementación que arma y ejecuta el SQL; Spring Data JPA es la capa que genera repositorios sin escribir SQL ni una implementación concreta.
+- **La entidad**: `@Entity` marca la clase como tabla persistente; `@Id` + `@GeneratedValue(strategy = GenerationType.IDENTITY)` definen la clave primaria autogenerada. `@Column`/`@Table` solo hacen falta si el nombre no coincide con la convención (`Alumno` → `alumno`, `nombreCompleto` → `nombre_completo`).
+- **`application.properties`**: datasource (URL, usuario, contraseña), `ddl-auto` (`create-drop`, `update` o `validate` — **nunca `update` en producción**, ahí van migraciones controladas) y `show-sql` para ver cada sentencia que ejecuta Hibernate.
+- **H2 en memoria**: no requiere instalación. Con `spring.h2.console.enabled=true` se habilita la consola web en `/h2-console`. Los datos persisten mientras el proceso corre y desaparecen al reiniciar; esa limitación se resuelve en la Clase 6 con MySQL.
+- **`JpaRepository<T, ID>`**: trae gratis `findAll`, `findById`, `save`, `deleteById`, `count`, `existsById`. Spring genera un proxy en tiempo de ejecución: solo se declara la interfaz, sin cuerpo y sin `@Repository`. Como `AlumnoService` dependía de la interfaz y no de la implementación (Clase 4), cambiar de persistencia no tocó ni el controller ni el service.
+- **Entidad ≠ DTO**: exponer la entidad acopla la API al modelo de base y, con relaciones, puede filtrar objetos completos o entrar en recursión infinita al serializar. `AlumnoRequest`/`AlumnoResponse` siguen siendo la fachada pública.
+- **`@ManyToMany` (adelanto de la Clase 6)**: un alumno cursa varias materias y una materia tiene varios alumnos; en el modelo relacional se resuelve con la tabla intermedia `alumno_materia` (`alumno_id`, `materia_id`). En JPA se modela con `@ManyToMany` + `@JoinTable` en el **lado dueño** de la relación — acá, `Alumno`.
+- **`data.sql`**: inserts de arranque. Requiere `spring.jpa.defer-datasource-initialization=true`; sin eso Spring corre el script antes de que Hibernate cree las tablas y la app falla al arrancar. Si se cargan materias e inscripciones, el orden importa: `alumno` → `materia` → `alumno_materia`.
+
+### Paso a paso en Eclipse
+
+**Parte 1: persistencia con H2**
+
+1. Agregar `spring-boot-starter-data-jpa` y `com.h2database:h2` (scope `runtime`) al `pom.xml`. En Spring Boot 4 la consola web va aparte: `spring-boot-h2console`. Clic derecho sobre el proyecto → Maven → Update Project (Alt+F5).
+2. Convertir `Alumno` en entidad: `@Entity` sobre la clase, `@Id` + `@GeneratedValue(strategy = GenerationType.IDENTITY)` sobre `id`.
+3. `AlumnoRepository extends JpaRepository<Alumno, Long>`. Borrar `AlumnoRepositoryEnMemoria`.
+4. Compilar y confirmar que `AlumnoService` no cambió.
+5. Configurar `application.properties`: datasource, `ddl-auto=update`, `show-sql=true`, `spring.h2.console.enabled=true`.
+6. Arrancar y leer en consola el `Hibernate: create table alumno (...)`; abrir `/h2-console` y ver la tabla.
+7. Cargar datos iniciales con `data.sql` + `spring.jpa.defer-datasource-initialization=true`.
+8. Correr la collection completa de Postman: todo responde igual que en la Clase 4, pero los datos sobreviven mientras la app corre.
+
+**Parte 2: relación Alumno–Materia**
+
+1. Crear la entidad `Materia` (`@Entity`, `@Id`, `@GeneratedValue(IDENTITY)`, campos `codigo` y `nombre`).
+2. Agregar en `Alumno` el campo `List<Materia> materias` con `@ManyToMany` + `@JoinTable(name = "alumno_materia", joinColumns = @JoinColumn(name = "alumno_id"), inverseJoinColumns = @JoinColumn(name = "materia_id"))`.
+3. Crear `MateriaRepository extends JpaRepository<Materia, Long>`.
+4. Inyectar `MateriaRepository` en `AlumnoService` sumando el parámetro al constructor existente (sin `@Autowired`).
+5. Agregar `inscribirEnMateria(alumnoId, materiaId)` y `obtenerMateriasDeAlumno(alumnoId)` en el service.
+6. Agregar `POST /alumnos/{id}/materias/{materiaId}` y `GET /alumnos/{id}/materias` en el controller.
+7. Reiniciar y confirmar en consola el `Hibernate: create table alumno_materia (...)`.
+8. Probar en Postman: crear materias, inscribir un alumno, verificar con el GET de materias del alumno.
+
+### Errores frecuentes
+
+| Error | Causa | Solución |
+|---|---|---|
+| Whitelabel Error Page (404) en `/error` | URL sin mapping, o puerto distinto de 9080 | Confirmar la URL exacta y `http://localhost:9080/...` |
+| `data.sql` falla al arrancar (tabla no existe) | Falta `spring.jpa.defer-datasource-initialization=true`, o el insert de `alumno_materia` va antes que los de `alumno`/`materia` | Agregar la property y respetar el orden `alumno` → `materia` → `alumno_materia` |
+| `/h2-console` responde 404 | En Spring Boot 4 la consola no viene con `spring-boot-autoconfigure` | Agregar la dependencia `spring-boot-h2console` y reiniciar |
+| `/h2-console` da `Database "~/test" not found` | Se envió el formulario con la JDBC URL por defecto | Usar exactamente `jdbc:h2:mem:alumnosdb` |
+| El `id` llega duplicado o en 0 al crear un alumno | El mapeo de `AlumnoRequest` a `Alumno` seguía seteando el id a mano | Sacar esa línea: lo asigna Hibernate |
+| JSON con recursión infinita o alumnos/materias repetidos sin fin | Se expuso la entidad y se agregó el lado inverso `@ManyToMany(mappedBy=...)` en `Materia` | Pasar a DTOs también para `Materia` (`MateriaResponse`) |
+| `UnsatisfiedDependencyException` al arrancar | Falta el bean del nuevo repository o el constructor de `AlumnoService` no quedó bien al agregar `MateriaRepository` | Revisar que el constructor reciba ambos repositorios y que ambas interfaces existan |
+
+### Secuencia de prueba en Postman
+
+1. `GET /alumnos` → aparecen los 3 alumnos de `data.sql`.
+2. Cargar materias (por `/h2-console`, ya que no hay endpoint de alta de `Materia` todavía).
+3. `POST /alumnos/1/materias/3` → inscribe al alumno 1 en la materia 3.
+4. `GET /alumnos/1/materias` → devuelve las materias del alumno 1.
+5. Reiniciar la app (Stop + Run As Spring Boot App) y repetir el paso 4: vuelven solo los datos que recarga `data.sql`. Es la demostración en vivo de que H2 en memoria no sobrevive al reinicio del proceso.
+
+### Deudas que quedan a propósito
+
+| Problema | Se resuelve en |
+|---|---|
+| `inscribirEnMateria` tira `RuntimeException` genérico → `500` en vez de `404` | Clase 7 (`@RestControllerAdvice`) |
+| `GET /alumnos/{id}/materias` devuelve la entidad `Materia` directo, sin DTO | Tarea: `MateriaResponse` + repository/service/DTOs para `Materia` |
+| `data.sql` solo carga alumnos; materias e inscripciones se cargan a mano | Próxima clase |
+| `POST /alumnos` con `{}` crea un alumno de puros `null` | Clase 6 (Bean Validation) |
+
+### Glosario
+
+- **ORM (Object-Relational Mapping)**: capa que traduce objetos Java a filas de tablas relacionales y viceversa.
+- **JPA (Jakarta Persistence API)**: especificación de Java para persistencia; define interfaces y anotaciones.
+- **Hibernate**: implementación de JPA que ejecuta el SQL real.
+- **Spring Data JPA**: abstracción sobre JPA que genera repositorios sin implementación manual.
+- **`@Entity`**: marca una clase como tabla persistente.
+- **`@Id` / `@GeneratedValue`**: clave primaria y su estrategia de generación (acá, `IDENTITY`).
+- **`ddl-auto`**: qué hace Hibernate con el esquema al arrancar (`create-drop`, `update`, `validate`).
+- **H2**: base de datos en memoria usada para desarrollo y aprendizaje.
+- **`JpaRepository<T, ID>`**: interfaz de Spring Data que provee CRUD básico sin implementación.
+- **`@ManyToMany`**: relación muchos a muchos entre dos entidades, resuelta con una tabla intermedia.
+- **`@JoinTable`**: define el nombre de la tabla intermedia y sus columnas de clave foránea, en el lado dueño.
+- **Lado dueño de la relación**: la entidad que declara el `@JoinTable` (acá, `Alumno`); es la que Hibernate usa para sincronizar los cambios.
+
 ## Próxima clase
 
-**Clase 5 — Persistencia con Spring Data JPA y H2.** La interfaz `AlumnoRepository` se reemplaza por `JpaRepository<Alumno, Long>` contra una base H2 en memoria (con consola web en `/h2-console`); `Alumno` pasa a ser `@Entity`. Gracias a que el `Service` depende de la interfaz y no de la implementación, el `Service` y el `Controller` no cambian. Tarea: aplicar el mismo refactor de capas (repository + service + DTOs) a `Materia`.
+**Clase 6 — Spring Data JPA (parte 2): relaciones, queries, MySQL y validación.**
+
+- Ya se adelantó `@ManyToMany`; queda `LAZY` vs `EAGER` y el problema N+1 en profundidad.
+- Query methods derivados del nombre (`findByApellido`, `findByApellidoContainingIgnoreCase`) y `@Query` con JPQL.
+- Paginación y ordenamiento: `Pageable`, `Page<T>`, `Sort`.
+- Bean Validation: `@Valid`, `@NotBlank`, `@Size`, `@Pattern`, `@Positive`.
+- Migración a MySQL (puede quedar como tarea si el tiempo no alcanza).
+
+**Tarea de esta clase:** dejar `Materia` con su propio `JpaRepository` (ya hecho) y probar la inscripción de al menos 2 alumnos en 2 materias distintas desde Postman.

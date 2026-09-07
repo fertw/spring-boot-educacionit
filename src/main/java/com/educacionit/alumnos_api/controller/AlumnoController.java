@@ -20,6 +20,7 @@ import org.springframework.http.ResponseEntity;
 import com.educacionit.alumnos_api.dto.AlumnoRequest;
 import com.educacionit.alumnos_api.dto.AlumnoResponse;
 import com.educacionit.alumnos_api.model.Alumno;
+import com.educacionit.alumnos_api.model.Materia;
 import com.educacionit.alumnos_api.service.AlumnoService;
 
 @RestController
@@ -109,5 +110,16 @@ public class AlumnoController {
 		return alumnoService.eliminar(id)
 				? ResponseEntity.noContent().build()
 				: ResponseEntity.notFound().build();
+	}
+	
+	@PostMapping("/{id}/materias/{materiaId}")
+	public ResponseEntity<AlumnoResponse> asignarMateria(@PathVariable("id") Long id,@PathVariable("materiaId") Long materiaId) {
+		Alumno alumnoActualizado = alumnoService.inscribirEnMateria(id, materiaId);
+		return ResponseEntity.ok(AlumnoResponse.fromModel(alumnoActualizado));
+	}
+	
+	@GetMapping("/{id}/materias")
+	public ResponseEntity<List<Materia>> materiasDeAlumno(@PathVariable("id") Long id) {
+	    return ResponseEntity.ok(alumnoService.obtenerMateriasDeAlumno(id));
 	}
 }
