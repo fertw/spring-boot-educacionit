@@ -1,9 +1,13 @@
 package com.educacionit.alumnos_api.model;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.ManyToMany;
 
 @Entity
 public class Materia {
@@ -14,6 +18,8 @@ public class Materia {
 	private Long id;
 	private String nombre;
 	private String codigo;
+	@ManyToMany(mappedBy = "materias")
+	private List<Alumno> alumnos = new ArrayList<>();
 	
 	public Materia() {
 		super();
@@ -48,6 +54,14 @@ public class Materia {
 	public void setCodigo(String codigo) {
 		this.codigo = codigo;
 	}
+	
+	public List<Alumno> getAlumnos() {
+		return alumnos;
+	}
+	
+	public void setAlumnos(List<Alumno> alumnos) {
+		this.alumnos = alumnos;
+	}	
 	
 	
 }

@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 
 import com.educacionit.alumnos_api.dto.AlumnoRequest;
@@ -22,6 +24,8 @@ import com.educacionit.alumnos_api.dto.AlumnoResponse;
 import com.educacionit.alumnos_api.model.Alumno;
 import com.educacionit.alumnos_api.model.Materia;
 import com.educacionit.alumnos_api.service.AlumnoService;
+
+import jakarta.validation.Valid;
 
 @RestController
 @RequestMapping("/alumnos")
@@ -34,11 +38,11 @@ public class AlumnoController {
 	}
 
 	@GetMapping
-	public ResponseEntity<List<AlumnoResponse>> listar() {
-		List<AlumnoResponse> respuesta = alumnoService.listar().stream()
-				.map(AlumnoResponse::fromModel)
-				.toList();
-		return ResponseEntity.ok(respuesta);
+	public ResponseEntity<Page<AlumnoResponse>> listar(Pageable pageable) {
+		Page<AlumnoResponse> pagina = alumnoService.listar(pageable)
+				.map(AlumnoResponse::fromModel);			
+		
+		return ResponseEntity.ok(pagina);
 	}
 
 	@GetMapping("/{id}")
@@ -78,7 +82,7 @@ public class AlumnoController {
 	}
 
 	@PostMapping
-	public ResponseEntity<AlumnoResponse> crear(@RequestBody AlumnoRequest alumno) {
+	public ResponseEntity<AlumnoResponse> crear(@Valid @RequestBody AlumnoRequest alumno) {
 		Alumno alumnoCreado = alumnoService.crear(alumno.toModel());
 		URI ubicacion = ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}")
 				.buildAndExpand(alumnoCreado.getId()).toUri();

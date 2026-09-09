@@ -81,6 +81,39 @@ Con la app corriendo, entrar a `http://localhost:9080/h2-console` y conectarse c
 
 > El formulario trae por defecto `jdbc:h2:~/test`, que apunta a un archivo inexistente y da `Database not found`. Hay que reemplazarlo por la URL de arriba, la misma del `application.properties`.
 
+## MySQL con Docker (perfil `mysql`)
+
+El proyecto trae también `application-mysql.properties` para correr contra MySQL en vez de H2. El `docker-compose.yml` de esta carpeta levanta MySQL y phpMyAdmin ya configurados para ese perfil.
+
+1. Levantar los contenedores:
+   ```bash
+   docker compose up -d
+   ```
+2. Confirmar que están arriba:
+   ```bash
+   docker compose ps
+   ```
+3. Arrancar la app con el perfil `mysql`:
+   ```bash
+   ./mvnw spring-boot:run -Dspring-boot.run.profiles=mysql
+   ```
+   (En Eclipse: **Run Configurations → Arguments → VM arguments** → `-Dspring.profiles.active=mysql`, o **Program arguments** → `--spring.profiles.active=mysql`.)
+
+| Servicio    | URL / Conexión                              | Credenciales           |
+|-------------|----------------------------------------------|------------------------|
+| MySQL       | `localhost:3306`, base `alumnos`             | user `root`, sin password |
+| phpMyAdmin  | `http://localhost:8082`                      | user `root`, sin password |
+
+Para parar los contenedores (sin borrar los datos):
+```bash
+docker compose stop
+```
+
+Para bajarlos y borrar también el volumen de datos:
+```bash
+docker compose down -v
+```
+
 ## Endpoints disponibles
 
 ### Clase 2 — recurso `/alumnos`

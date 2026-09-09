@@ -3,6 +3,8 @@ package com.educacionit.alumnos_api.service;
 import java.util.List;
 import java.util.Optional;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.educacionit.alumnos_api.model.Alumno;
@@ -21,8 +23,8 @@ public class AlumnoService {
 		this.materiaRepository = materiaRepository;
 	}
 	
-	public List<Alumno> listar() {
-		return alumnoRepository.findAll();
+	public Page<Alumno> listar(Pageable pageable) {
+		return alumnoRepository.findAll(pageable);
 	}
 	
 	public Optional<Alumno> buscarPorId(Long id) {
