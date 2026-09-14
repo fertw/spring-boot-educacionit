@@ -7,6 +7,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
+import com.educacionit.alumnos_api.dto.AlumnoResponse;
+import com.educacionit.alumnos_api.exception.AlumnoNoEncontradoException;
 import com.educacionit.alumnos_api.model.Alumno;
 import com.educacionit.alumnos_api.model.Materia;
 import com.educacionit.alumnos_api.repository.AlumnoRepository;
@@ -27,8 +29,10 @@ public class AlumnoService {
 		return alumnoRepository.findAll(pageable);
 	}
 	
-	public Optional<Alumno> buscarPorId(Long id) {
-		return alumnoRepository.findById(id);
+	public AlumnoResponse buscarPorId(Long id) {
+		Alumno alumno = alumnoRepository.findById(id)
+				.orElseThrow(() -> new AlumnoNoEncontradoException(id));
+		return AlumnoResponse.fromModel(alumno);
 	}
 	
 	public Alumno crear(Alumno alumno) {

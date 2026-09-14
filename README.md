@@ -2,7 +2,7 @@
 
 API REST desarrollada con Spring Boot como parte del curso **Java Spring Boot** de EducaciónIT. El proyecto evoluciona clase a clase; cada clase queda marcada con un tag (`clase-1`, `clase-2`, …) para poder partir del estado exacto de cada encuentro.
 
-Este commit corresponde a la **Clase 5 — Spring Data JPA (parte 1): persistencia**: la lista en memoria se reemplaza por una base H2 real, con `AlumnoRepository` extendiendo `JpaRepository` (Spring genera la implementación) y `Alumno` convertido en `@Entity`. Como adelanto de la Clase 6 se agrega la relación `@ManyToMany` entre `Alumno` y `Materia`, con dos endpoints de inscripción.
+Este commit corresponde a la **Clase 7 — Manejo de errores y APIs de terceros**: un `@RestControllerAdvice` (`GlobalExceptionHandler`) centraliza el mapeo de excepciones a `ProblemDetail` (RFC 9457), reemplazando el `RuntimeException` genérico de `AlumnoService`. Se suma además un recurso nuevo, `/externo/feriados/{anio}`, que consume la API pública de feriados de Argentina vía `RestClient`.
 
 ## Requisitos
 
@@ -176,7 +176,18 @@ curl -X POST http://localhost:9080/alumnos/1/materias/1
 curl http://localhost:9080/alumnos/1/materias
 ```
 
-> El `RuntimeException` genérico del service es provisorio: las excepciones propias con `404`/`409` llegan en la Clase 7 con `@RestControllerAdvice`.
+### Clase 7 — manejo de errores y API externa de feriados
+
+| Método | Ruta                          | Qué hace                                              | Status |
+|--------|-------------------------------|--------------------------------------------------------|--------|
+| GET    | `/externo/feriados/{anio}`   | Consulta los feriados de un año vía la API de ArgentinaDatos | 200 · 500 si el año no tiene feriados publicados |
+
+`AlumnoService` (`buscarPorId`, `actualizar`, `eliminar`) ya no devuelve `null`/`Optional`: usa `orElseThrow(() -> new AlumnoNoEncontradoException(id))`, y `AlumnoController` dejó de chequear `if (alumno == null)` a mano. Ambas excepciones (`AlumnoNoEncontradoException` → 404, `LegajoDuplicadoException` → 409) y los errores de `@Valid` (400) se resuelven en `GlobalExceptionHandler` con `ProblemDetail`.
+
+```bash
+curl http://localhost:9080/alumnos/999
+curl http://localhost:9080/externo/feriados/2026
+```
 
 ## Temario de la Clase 2
 
@@ -304,7 +315,7 @@ Objetivo: que los alumnos sobrevivan al reinicio de la aplicación. Se reemplaza
 
 | Problema | Se resuelve en |
 |---|---|
-| `inscribirEnMateria` tira `RuntimeException` genérico → `500` en vez de `404` | Clase 7 (`@RestControllerAdvice`) |
+| `inscribirEnMateria` tira `RuntimeException` genérico → `500` en vez de `404` | ✅ Clase 7 (`@RestControllerAdvice`) |
 | `GET /alumnos/{id}/materias` devuelve la entidad `Materia` directo, sin DTO | Tarea: `MateriaResponse` + repository/service/DTOs para `Materia` |
 | `data.sql` solo carga alumnos; materias e inscripciones se cargan a mano | Próxima clase |
 | `POST /alumnos` con `{}` crea un alumno de puros `null` | Clase 6 (Bean Validation) |
@@ -324,14 +335,29 @@ Objetivo: que los alumnos sobrevivan al reinicio de la aplicación. Se reemplaza
 - **`@JoinTable`**: define el nombre de la tabla intermedia y sus columnas de clave foránea, en el lado dueño.
 - **Lado dueño de la relación**: la entidad que declara el `@JoinTable` (acá, `Alumno`); es la que Hibernate usa para sincronizar los cambios.
 
+## Temario de la Clase 7
+
+Objetivo: que la API deje de responder `500` genéricos y de exponer detalles internos, y que sepa consumir un servicio externo con manejo de errores propio.
+
+- **Por qué centralizar el manejo de errores**: hasta la Clase 6, un `id` inexistente o un legajo duplicado terminaban en `RuntimeException` sin capturar → `500` con stacktrace filtrado al cliente. `@RestControllerAdvice` intercepta las excepciones de **todos** los controllers en un solo lugar, sin `try/catch` repetido en cada método.
+- **Excepciones de dominio**: `AlumnoNoEncontradoException` y `LegajoDuplicadoException` son `RuntimeException` propias — no dependen de Spring, solo llevan el mensaje. El service las lanza (`orElseThrow`), el controller no sabe que existen.
+- **`ProblemDetail` (RFC 9457)**: reemplaza el body de error ad-hoc por un formato estándar (`type`, `title`, `status`, `detail`), con `setProperty(...)` para agregar campos propios (`timestamp`, `errors`).
+- **`GlobalExceptionHandler`**: un `@ExceptionHandler` por tipo de excepción → `AlumnoNoEncontradoException` (404), `LegajoDuplicadoException` (409), `MethodArgumentNotValidException` (400, con la lista de `{campo, mensaje}` de `@Valid`) y `Exception` genérica (500, sin exponer el mensaje real).
+- **Consumir una API externa con `RestClient`**: `RestClientConfig` define el bean con `baseUrl` y timeouts (`connectTimeout`/`readTimeout`); `FeriadoService` lo inyecta y arma la request (`.get().uri(...).retrieve().body(...)`). `.onStatus(...)` traduce un `404` de la API externa en una excepción propia, en vez de propagar el error del proveedor tal cual.
+- **DTO con campos que no controlás**: `FeriadoResponse` sólo modela `fecha`, `tipo` y `nombre`; `@JsonIgnoreProperties(ignoreUnknown = true)` evita que la app rompa si la API externa agrega un campo nuevo.
+- **Cuando la API externa desaparece**: la pensada originalmente (`nolaborables.com.ar`) está dada de baja desde fines de 2023 (dominio no renovado — [issue #48](https://github.com/pjnovas/nolaborables/issues/48)); se migró a [ArgentinaDatos](https://argentinadatos.com/docs/operations/get-feriados.html), mismo tipo de dato con otro esquema de campos.
+
+### Deudas que quedan a propósito (Clase 7)
+
+| Problema | Se resuelve en |
+|---|---|
+| `AlumnoService.crear` no chequea legajo duplicado (`LegajoDuplicadoException` está lista pero no se lanza) | Tarea de esta clase: sumar `existsByLegajo` a `AlumnoRepository` y validar antes de guardar |
+| `GET /externo/feriados` (año actual, sin path variable) mencionado en el changelog, no implementado | Pendiente |
+
 ## Próxima clase
 
-**Clase 6 — Spring Data JPA (parte 2): relaciones, queries, MySQL y validación.**
+**Clase 8** (a confirmar temario).
 
-- Ya se adelantó `@ManyToMany`; queda `LAZY` vs `EAGER` y el problema N+1 en profundidad.
-- Query methods derivados del nombre (`findByApellido`, `findByApellidoContainingIgnoreCase`) y `@Query` con JPQL.
-- Paginación y ordenamiento: `Pageable`, `Page<T>`, `Sort`.
-- Bean Validation: `@Valid`, `@NotBlank`, `@Size`, `@Pattern`, `@Positive`.
-- Migración a MySQL (puede quedar como tarea si el tiempo no alcanza).
-
-**Tarea de esta clase:** dejar `Materia` con su propio `JpaRepository` (ya hecho) y probar la inscripción de al menos 2 alumnos en 2 materias distintas desde Postman.
+**Tarea de esta clase:**
+- Usar `LegajoDuplicadoException` en `AlumnoService.crear`: agregar `existsByLegajo(String legajo)` a `AlumnoRepository` y chequear duplicados antes de guardar — el handler en `GlobalExceptionHandler` ya está listo, solo falta lanzar la excepción.
+- Laboratorio del Módulo 5 (PDF), si no se completó en clase.

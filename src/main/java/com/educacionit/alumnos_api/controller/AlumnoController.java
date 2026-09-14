@@ -47,10 +47,7 @@ public class AlumnoController {
 
 	@GetMapping("/{id}")
 	public ResponseEntity<AlumnoResponse> buscarPorId(@PathVariable("id") Long id) {
-		return alumnoService.buscarPorId(id)
-				.map(AlumnoResponse::fromModel)
-				.map(ResponseEntity::ok)
-				.orElse(ResponseEntity.notFound().build());
+		return ResponseEntity.ok(alumnoService.buscarPorId(id));
 	}
 
 	@GetMapping("/legajo/{legajo}")
