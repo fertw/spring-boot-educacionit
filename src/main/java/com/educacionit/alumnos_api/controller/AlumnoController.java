@@ -25,8 +25,13 @@ import com.educacionit.alumnos_api.model.Alumno;
 import com.educacionit.alumnos_api.model.Materia;
 import com.educacionit.alumnos_api.service.AlumnoService;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 
+@Tag(name = "Alumnos", description = "Operaciones CRUD con los alumnos")
+@SecurityRequirement(name = "basicAuth")
 @RestController
 @RequestMapping("/alumnos")
 public class AlumnoController {
@@ -37,6 +42,7 @@ public class AlumnoController {
 		this.alumnoService = alumnoService;
 	}
 
+	@Operation(summary = "Listar alumnos", description = "Obtiene una lista paginada de todos los alumnos registrados en el sistema.")
 	@GetMapping
 	public ResponseEntity<Page<AlumnoResponse>> listar(Pageable pageable) {
 		Page<AlumnoResponse> pagina = alumnoService.listar(pageable)
@@ -45,11 +51,13 @@ public class AlumnoController {
 		return ResponseEntity.ok(pagina);
 	}
 
+	@Operation(summary = "Buscar alumno por ID", description = "Obtiene los detalles de un alumno específico utilizando su ID único.")
 	@GetMapping("/{id}")
 	public ResponseEntity<AlumnoResponse> buscarPorId(@PathVariable("id") Long id) {
 		return ResponseEntity.ok(alumnoService.buscarPorId(id));
 	}
 
+	@Operation(summary = "Buscar alumno por legajo", description = "Obtiene los detalles de un alumno específico utilizando su legajo único.")
 	@GetMapping("/legajo/{legajo}")
 	public ResponseEntity<AlumnoResponse> buscarPorLegajo(@PathVariable("legajo") String legajo) {
 		return alumnoService.buscarPorLegajo(legajo)
@@ -58,6 +66,7 @@ public class AlumnoController {
 				.orElse(ResponseEntity.notFound().build());
 	}
 
+	@Operation(summary = "Buscar alumno por DNI", description = "Obtiene los detalles de un alumno específico utilizando su DNI único.")
 	@GetMapping("/dni/{dni}")
 	public ResponseEntity<AlumnoResponse> buscarPorDni(@PathVariable("dni") String dni) {
 		return alumnoService.buscarPorDni(dni)
@@ -66,6 +75,7 @@ public class AlumnoController {
 				.orElse(ResponseEntity.notFound().build());
 	}
 
+	@Operation(summary = "Buscar alumnos por criterios", description = "Permite buscar alumnos utilizando uno o más criterios de búsqueda, como nombre, apellido, DNI o legajo.")
 	@GetMapping("/buscar")
 	public ResponseEntity<List<AlumnoResponse>> buscar(
 			@RequestParam(value = "nombre", required = false) String nombre,
@@ -78,6 +88,7 @@ public class AlumnoController {
 		return ResponseEntity.ok(respuesta);
 	}
 
+	@Operation(summary = "Crear alumno", description = "Permite crear un nuevo alumno en el sistema proporcionando los datos necesarios.")
 	@PostMapping
 	public ResponseEntity<AlumnoResponse> crear(@Valid @RequestBody AlumnoRequest alumno) {
 		Alumno alumnoCreado = alumnoService.crear(alumno.toModel());
@@ -86,6 +97,7 @@ public class AlumnoController {
 		return ResponseEntity.created(ubicacion).body(AlumnoResponse.fromModel(alumnoCreado));
 	}
 
+	@Operation(summary = "Actualizar alumno", description = "Permite actualizar los datos de un alumno existente utilizando su ID único.")
 	@PutMapping("/{id}")
 	public ResponseEntity<AlumnoResponse> actualizar(@PathVariable("id") Long id, @RequestBody AlumnoRequest alumno) {
 		return alumnoService.actualizar(id, alumno.toModel())
@@ -94,6 +106,7 @@ public class AlumnoController {
 				.orElse(ResponseEntity.notFound().build());
 	}
 
+	@Operation(summary = "Actualizar apellido de alumno", description = "Permite actualizar únicamente el apellido de un alumno existente utilizando su ID único." )
 	@PatchMapping("/{id}")
 	public ResponseEntity<AlumnoResponse> actualizarApellido(@PathVariable("id") Long id, @RequestBody Map<String, String> cambios) {
 		String nuevoApellido = cambios.get("apellido");

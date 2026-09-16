@@ -354,10 +354,38 @@ Objetivo: que la API deje de responder `500` genéricos y de exponer detalles in
 | `AlumnoService.crear` no chequea legajo duplicado (`LegajoDuplicadoException` está lista pero no se lanza) | Tarea de esta clase: sumar `existsByLegajo` a `AlumnoRepository` y validar antes de guardar |
 | `GET /externo/feriados` (año actual, sin path variable) mencionado en el changelog, no implementado | Pendiente |
 
+## Temario de la Clase 8
+
+Clase de cierre: no se agrega funcionalidad de negocio nueva sobre `alumnos-api` — el objetivo es documentar la API, empaquetarla para correr sin IDE, y dar el primer paso de seguridad. Única excepción con contenido nuevo: el bloque de seguridad básica.
+
+- **Documentación con Swagger / OpenAPI**: `OpenAPI` es la especificación (JSON/YAML que describe endpoints, parámetros y respuestas); **Swagger** son las herramientas que la leen, entre ellas Swagger UI. `springdoc-openapi` la genera sola inspeccionando los controllers existentes — no se escribe a mano. Ventajas: queda siempre actualizada, se prueba desde el navegador, y es el contrato que le informa a un frontend qué esperar sin preguntar. `@Tag` y `@Operation` en `AlumnoController` documentan grupo y detalle de cada endpoint; `OpenApiConfig` define título, descripción y versión de la API.
+- **JAR vs WAR**: WAR se despliega dentro de un servidor externo ya instalado (Tomcat, JBoss); un JAR de Spring Boot trae el servidor embebido, por eso alcanza con `java -jar` en cualquier lado. Spring Boot conviene por la autoconfiguración (lee el `pom.xml` y configura razonablemente lo que encuentra) y por los *starters*, que traen de una todo lo necesario para una funcionalidad.
+- **Empaquetado sin IDE**: `mvn clean package` genera `target/alumnos-api-0.0.1-SNAPSHOT.jar`; se ejecuta con `java -jar target/alumnos-api-0.0.1-SNAPSHOT.jar` y el perfil se pasa como flag *después* del nombre del jar (`--spring.profiles.active=mysql`).
+- **Actuator (bonus)**: `spring-boot-starter-actuator` expone `/actuator/health`, con `status: UP` si la app responde. Distingue `liveness` (¿el proceso sigue vivo?) de `readiness` (¿ya terminó de arrancar y puede recibir tráfico?) — en un proyecto real esto lo consulta un balanceador o Kubernetes, no una persona.
+- **Seguridad básica con Basic Auth (contenido nuevo)**: Spring Security agrega un filtro que corre antes del controller, no una anotación por método. Apenas se agrega la dependencia, todo pasa a devolver `401` por defecto — arranca "todo cerrado" y las rutas libres se declaran a mano. `SecurityConfig` define un usuario en memoria (`InMemoryUserDetailsManager`, `admin`/`admin`) y el bean `SecurityFilterChain`, que deja `/swagger-ui/**` y `/v3/api-docs/**` con `permitAll()` y exige autenticación en el resto (`anyRequest().authenticated()` + `httpBasic()`). `@SecurityScheme` en `OpenApiConfig` y `@SecurityRequirement` en el controller habilitan el botón "Authorize" de Swagger UI. Límites de Basic Auth (por qué no alcanza para producción): las credenciales viajan en Base64 sin cifrar en cada request, no hay sesión ni expiración, y un único usuario no distingue quién hizo cada operación — eso es lo que resuelve JWT, el próximo paso natural.
+
+### Errores frecuentes (Clase 8)
+
+| Error | Causa | Solución |
+|---|---|---|
+| `500` en `/v3/api-docs` | `springdoc-openapi` en versión 2.x, incompatible con Boot 4 (usa Jackson 3) | Subir la dependencia a la versión 3.0.0 o superior |
+| `/swagger-ui.html` da 404 | Dependencia mal agregada o falta Update Maven Project | Verificar el `pom.xml` y repetir Alt+F5 |
+| Prompt nativo del navegador pidiendo usuario/contraseña al abrir Swagger | Falta el `permitAll()` de `/swagger-ui/**` y `/v3/api-docs/**`, o el orden de las reglas está invertido | Los `permitAll()` van antes de `anyRequest().authenticated()` |
+| El jar no arranca fuera del IDE | Se corrió `mvn package` en vez de `clean package`, o quedó un jar viejo en `target/` | `mvn clean package` de nuevo antes de ejecutar |
+| El perfil no toma con `--spring.profiles.active=mysql` | El flag se puso antes de `-jar` en vez de después del nombre del jar | El flag va al final: `java -jar archivo.jar --spring.profiles.active=mysql` |
+| Postman sigue devolviendo `401` con Basic Auth cargado | Usuario o contraseña no coinciden con `InMemoryUserDetailsManager`, o falta el prefijo `{noop}` en el password | Revisar que las credenciales coincidan exactamente con las del bean |
+
+### Deudas que quedan a propósito (Clase 8)
+
+| Problema | Se resuelve en |
+|---|---|
+| `LegajoDuplicadoException` sigue sin usarse en `AlumnoService.crear` | Pendiente de Clase 7, sigue abierto |
+| Usuario hardcodeado en memoria, sin sesión ni expiración | JWT |
+
 ## Próxima clase
 
-**Clase 8** (a confirmar temario).
+Cierre de curso. Frentes sugeridos para seguir por cuenta propia:
 
-**Tarea de esta clase:**
-- Usar `LegajoDuplicadoException` en `AlumnoService.crear`: agregar `existsByLegajo(String legajo)` a `AlumnoRepository` y chequear duplicados antes de guardar — el handler en `GlobalExceptionHandler` ya está listo, solo falta lanzar la excepción.
-- Laboratorio del Módulo 5 (PDF), si no se completó en clase.
+- **Testing**: JUnit 5, MockMvc, `@SpringBootTest`, Testcontainers.
+- **Seguridad**: de Basic Auth a JWT (resuelve expiración, sesión y distinguir usuarios, que Basic Auth no cubre).
+- **Docker**, despliegue, y un frontend que consuma la API.
