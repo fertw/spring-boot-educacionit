@@ -356,36 +356,256 @@ Objetivo: que la API deje de responder `500` genéricos y de exponer detalles in
 
 ## Temario de la Clase 8
 
-Clase de cierre: no se agrega funcionalidad de negocio nueva sobre `alumnos-api` — el objetivo es documentar la API, empaquetarla para correr sin IDE, y dar el primer paso de seguridad. Única excepción con contenido nuevo: el bloque de seguridad básica.
+**Java Spring Boot · EducaciónIT · Miércoles 16/9 (1 h)**
 
-- **Documentación con Swagger / OpenAPI**: `OpenAPI` es la especificación (JSON/YAML que describe endpoints, parámetros y respuestas); **Swagger** son las herramientas que la leen, entre ellas Swagger UI. `springdoc-openapi` la genera sola inspeccionando los controllers existentes — no se escribe a mano. Ventajas: queda siempre actualizada, se prueba desde el navegador, y es el contrato que le informa a un frontend qué esperar sin preguntar. `@Tag` y `@Operation` en `AlumnoController` documentan grupo y detalle de cada endpoint; `OpenApiConfig` define título, descripción y versión de la API.
-- **JAR vs WAR**: WAR se despliega dentro de un servidor externo ya instalado (Tomcat, JBoss); un JAR de Spring Boot trae el servidor embebido, por eso alcanza con `java -jar` en cualquier lado. Spring Boot conviene por la autoconfiguración (lee el `pom.xml` y configura razonablemente lo que encuentra) y por los *starters*, que traen de una todo lo necesario para una funcionalidad.
-- **Empaquetado sin IDE**: `mvn clean package` genera `target/alumnos-api-0.0.1-SNAPSHOT.jar`; se ejecuta con `java -jar target/alumnos-api-0.0.1-SNAPSHOT.jar` y el perfil se pasa como flag *después* del nombre del jar (`--spring.profiles.active=mysql`).
-- **Actuator (bonus)**: `spring-boot-starter-actuator` expone `/actuator/health`, con `status: UP` si la app responde. Distingue `liveness` (¿el proceso sigue vivo?) de `readiness` (¿ya terminó de arrancar y puede recibir tráfico?) — en un proyecto real esto lo consulta un balanceador o Kubernetes, no una persona.
-- **Seguridad básica con Basic Auth (contenido nuevo)**: Spring Security agrega un filtro que corre antes del controller, no una anotación por método. Apenas se agrega la dependencia, todo pasa a devolver `401` por defecto — arranca "todo cerrado" y las rutas libres se declaran a mano. `SecurityConfig` define un usuario en memoria (`InMemoryUserDetailsManager`, `admin`/`admin`) y el bean `SecurityFilterChain`, que deja `/swagger-ui/**` y `/v3/api-docs/**` con `permitAll()` y exige autenticación en el resto (`anyRequest().authenticated()` + `httpBasic()`). `@SecurityScheme` en `OpenApiConfig` y `@SecurityRequirement` en el controller habilitan el botón "Authorize" de Swagger UI. Límites de Basic Auth (por qué no alcanza para producción): las credenciales viajan en Base64 sin cifrar en cada request, no hay sesión ni expiración, y un único usuario no distingue quién hizo cada operación — eso es lo que resuelve JWT, el próximo paso natural.
+> Clase corta y sin arrastre: lo que no entre hoy en vivo, queda documentado acá para que cada uno lo siga por su cuenta. A diferencia de las siete clases anteriores, hoy **no se agrega funcionalidad de negocio nueva** — todo lo que sigue es sobre el mismo proyecto `alumnos-api` que ya funciona, para dejarlo documentado, empaquetado, y armar el mapa de qué seguir estudiando.
+>
+> ⚠️ El bloque de **Seguridad básica** (Basic Auth) es una excepción a lo anterior: es contenido nuevo, no visto en ninguna clase previa. Si el tiempo no llega, es el primer bloque para saltear entero — queda igual documentado acá.
+
+### Temas de la clase
+
+1. Documentación con Swagger / OpenAPI — qué es, beneficios, configuración completa
+2. JAR vs WAR y las ventajas de Spring Boot
+3. Empaquetado y ejecución sin IDE (`mvn clean package`, `java -jar`)
+4. Bonus: Spring Boot Actuator (`/actuator/health`)
+5. Seguridad básica con Basic Auth (`spring-boot-starter-security`)
+6. Repaso del proyecto capa por capa
+7. Glosario final y próximos pasos (testing, JWT, Docker, despliegue, frontend)
+
+### Teoría
+
+#### 1. Documentación con Swagger / OpenAPI
+
+- **OpenAPI** es la especificación: un archivo JSON/YAML que describe cada endpoint, sus parámetros y sus respuestas.
+- **Swagger** es el conjunto de herramientas que leen esa especificación — Swagger UI (la que se usa hoy) y Swagger Editor.
+- No se escribe a mano: `springdoc-openapi` la genera automáticamente inspeccionando los controllers que ya existen.
+- Es un estándar de la industria: lo entienden Postman, los IDEs y hasta generadores automáticos de clientes.
+- **Beneficios concretos:** siempre queda actualizada (se regenera con cada build), se prueba desde el navegador sin instalar nada, es el contrato que le dice a un frontend qué esperar sin preguntar, y acelera el onboarding de alguien nuevo al equipo.
+- **Ejemplos públicos para mostrar en vivo:** [petstore3.swagger.io](https://petstore3.swagger.io/) (OpenAPI 3.0, el formato moderno) y [petstore.swagger.io](https://petstore.swagger.io/) (OpenAPI 2.0, el clásico). Sirven como aperitivo antes de mostrar la propia `alumnos-api` documentada.
+
+#### 2. JAR vs WAR y por qué Spring Boot
+
+- **WAR** (Web Application Archive): pensado para desplegarse dentro de un servidor externo ya instalado (Tomcat, JBoss, etc.). El servidor es responsabilidad de otra instalación, otra versión, otro mantenimiento.
+- **JAR**: el ejecutable trae su propio servidor embebido adentro. No hay nada externo que instalar.
+- `spring-boot-starter-webmvc` arma por default un jar autocontenido — es la razón por la que alcanza con `java -jar` para correr la API en cualquier lado.
+- **Por qué Spring Boot conviene:** arranca sin XML de configuración manual; autoconfiguración (mira el `pom.xml` y configura razonablemente lo que encuentra); los *starters* traen de una todo lo necesario para una funcionalidad; y el resultado final es "un jar, un comando", igual en la laptop de cada uno que en un servidor real.
+
+#### 3. Actuator (bonus)
+
+- `/actuator/health` es una foto de si la instancia está viva. Respuesta típica: `{"groups":["liveness","readiness"],"status":"UP"}`.
+- **`status: UP`**: la app responde. Si algo falla (ej. la base caída), diría `DOWN`.
+- **`liveness`** (`/actuator/health/liveness`): "¿el proceso sigue vivo o hay que reiniciarlo?"
+- **`readiness`** (`/actuator/health/readiness`): "¿ya terminó de arrancar y puede recibir tráfico?" — puede estar `DOWN` mientras la app todavía está inicializando, aunque el proceso ya esté `UP`.
+- En un proyecto real esto no lo mira una persona: lo consulta un balanceador de carga o Kubernetes cada tantos segundos, y decide con esa distinción si hay que reiniciar la instancia o simplemente esperar antes de mandarle tráfico.
+
+#### 4. Seguridad básica en Spring (contenido nuevo)
+
+- Spring Security agrega un **filtro** que se ejecuta antes de que el request llegue al controller — no es una anotación que se agregue método por método.
+- Por defecto, apenas se agrega la dependencia, la aplicación empieza a devolver **401 Unauthorized** en todos los endpoints: arranca en modo "todo cerrado", y las rutas que quedan libres se declaran explícitamente.
+- Para esta clase se usa **Basic Auth** con un usuario hardcodeado en memoria (`InMemoryUserDetailsManager`), sin armar un login completo.
+- El bean `SecurityFilterChain` es donde se decide qué rutas requieren autenticación y cuáles no.
+- **Límites de Basic Auth** (por qué no alcanza para producción): las credenciales viajan codificadas en Base64 en cada request, no cifradas; no hay noción de sesión ni expiración; y un único usuario no distingue quién hizo cada operación. Estos tres límites son justo lo que resuelve **JWT**, el próximo paso natural.
+
+### Paso a paso
+
+#### Bloque 0 — Dependencias (`pom.xml`)
+
+```xml
+<!-- Swagger / OpenAPI: OJO con la versión -->
+<dependency>
+    <groupId>org.springdoc</groupId>
+    <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+    <version>3.0.0</version> <!-- la serie 3.x es la compatible con Boot 4 (Jackson 3) -->
+</dependency>
+
+<!-- Actuator: starter oficial, sin version propia, sigue al spring-boot-starter-parent -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-actuator</artifactId>
+</dependency>
+
+<!-- Seguridad: starter oficial, sin version propia -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
+```
+
+Después de pegar esto: **Alt+F5** (Update Maven Project) en Eclipse.
+
+#### Bloque 1 — Swagger / OpenAPI
+
+1. Agregar la dependencia (ver arriba) con la **versión 3.0.0** — la 2.x apunta a Boot 3 y tira 500 en `/v3/api-docs` sobre Boot 4.
+2. Update Maven Project.
+3. Arrancar y abrir `http://localhost:9080/swagger-ui.html`.
+4. Recorrer los endpoints ya generados desde `AlumnoController` y `MateriaController`, sin haber tocado nada.
+5. Agregar `@Tag` y `@Operation` en el controller:
+
+```java
+package com.educacionit.alumnos_api.controller;
+
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
+@Tag(name = "Alumnos", description = "Operaciones CRUD sobre alumnos")
+@SecurityRequirement(name = "basicAuth") // solo si ya está el bloque de seguridad
+@RestController
+@RequestMapping("/alumnos")
+public class AlumnoController {
+
+    private final AlumnoService alumnoService;
+
+    public AlumnoController(AlumnoService alumnoService) {
+        this.alumnoService = alumnoService;
+    }
+
+    @Operation(summary = "Lista los alumnos, con filtro opcional por apellido")
+    @GetMapping
+    public ResponseEntity<List<AlumnoResponse>> listar(@RequestParam(required = false) String apellido) {
+        // sin cambios en el cuerpo
+    }
+
+    @Operation(summary = "Crea un nuevo alumno")
+    @PostMapping
+    public ResponseEntity<AlumnoResponse> crear(@Valid @RequestBody AlumnoRequest request) {
+        // sin cambios en el cuerpo
+    }
+    // el resto de los endpoints queda sin anotar, no hace falta documentar todo
+}
+```
+
+6. Configurar título, descripción y el botón "Authorize" (necesario si se dio seguridad):
+
+```java
+package com.educacionit.alumnos_api.config;
+
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
+import io.swagger.v3.oas.annotations.security.SecurityScheme;
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Info;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@SecurityScheme(
+    name = "basicAuth",
+    type = SecuritySchemeType.HTTP,
+    scheme = "basic"
+)
+public class OpenApiConfig {
+
+    @Bean
+    public OpenAPI alumnosApiOpenAPI() {
+        return new OpenAPI()
+            .info(new Info()
+                .title("Alumnos API")
+                .description("API REST para la gestión de alumnos y materias — EducaciónIT")
+                .version("1.0"));
+    }
+}
+```
+
+#### Bloque 2 — Empaquetado y ejecución sin IDE
+
+1. **Empaquetar**: clic derecho > Run As > Maven build..., goals `clean package`.
+2. **Ubicar el jar**: `target/alumnos-api-0.0.1-SNAPSHOT.jar`.
+3. **Ejecutar desde una terminal** (fuera de Eclipse): `java -jar target/alumnos-api-0.0.1-SNAPSHOT.jar`.
+4. **Pasar el perfil por línea de comandos**: `java -jar target/alumnos-api-0.0.1-SNAPSHOT.jar --spring.profiles.active=mysql` (el flag va **después** del nombre del jar).
+5. **Probar** la collection de Postman o Swagger UI contra el jar corriendo, mismo puerto 9080.
+
+#### Bloque 3 — Actuator (bonus, primero que se cae si falta tiempo)
+
+1. Agregar la dependencia (ver Bloque 0).
+2. Update Maven Project.
+3. Abrir `http://localhost:9080/actuator/health` y leer `{"groups":["liveness","readiness"],"status":"UP"}`.
+
+#### Bloque 4 — Seguridad básica con Basic Auth (contenido nuevo)
+
+1. Agregar la dependencia (ver Bloque 0). Apenas se agrega, sin configurar nada más, todos los endpoints empiezan a devolver 401 — mostrar esto primero, en vivo.
+2. Update Maven Project.
+3. Crear la clase de configuración completa:
+
+```java
+package com.educacionit.alumnos_api.config;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.core.userdetails.User;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.SecurityFilterChain;
+
+import static org.springframework.security.config.Customizer.withDefaults;
+
+@Configuration
+public class SecurityConfig {
+
+    @Bean
+    public InMemoryUserDetailsManager userDetailsService() {
+        UserDetails admin = User.withUsername("admin")
+                .password("{noop}admin") // {noop} = contraseña en texto plano, solo para esta clase
+                .roles("ADMIN")
+                .build();
+        return new InMemoryUserDetailsManager(admin);
+    }
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .csrf(AbstractHttpConfigurer::disable) // no aplica a una API REST sin sesión
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll() // Swagger queda libre
+                .anyRequest().authenticated() // todo lo demás pide login
+            )
+            .httpBasic(withDefaults());
+        return http.build();
+    }
+}
+```
+
+**Usuario:** `admin` / **Contraseña:** `admin` (los que quedaron hardcodeados arriba).
+
+### Estado final del código
+
+Al cierre de la Clase 8, `alumnos-api` tiene:
+
+- Toda la arquitectura en capas de las Clases 4 a 7 (Controller → Service → Repository, DTOs, JPA, validación, manejo de errores centralizado).
+- Documentación interactiva en `/swagger-ui.html`, con título propio y botón "Authorize" para Basic Auth.
+- Un jar ejecutable en `target/`, corrible con `java -jar` y con soporte de perfiles por línea de comandos.
+- `/actuator/health` expuesto, con los sub-chequeos `liveness` y `readiness`.
+- `spring-boot-starter-security` con Basic Auth protegiendo `/alumnos/**` y `/materias/**` (si se llegó a dar el bloque).
 
 ### Errores frecuentes (Clase 8)
 
 | Error | Causa | Solución |
 |---|---|---|
-| `500` en `/v3/api-docs` | `springdoc-openapi` en versión 2.x, incompatible con Boot 4 (usa Jackson 3) | Subir la dependencia a la versión 3.0.0 o superior |
+| **500 en `/v3/api-docs`** | `springdoc-openapi` en versión 2.x, incompatible con Boot 4.0.x (usa Jackson 3) | Subir la dependencia a la versión **3.0.0** o superior |
 | `/swagger-ui.html` da 404 | Dependencia mal agregada o falta Update Maven Project | Verificar el `pom.xml` y repetir Alt+F5 |
-| Prompt nativo del navegador pidiendo usuario/contraseña al abrir Swagger | Falta el `permitAll()` de `/swagger-ui/**` y `/v3/api-docs/**`, o el orden de las reglas está invertido | Los `permitAll()` van antes de `anyRequest().authenticated()` |
-| El jar no arranca fuera del IDE | Se corrió `mvn package` en vez de `clean package`, o quedó un jar viejo en `target/` | `mvn clean package` de nuevo antes de ejecutar |
+| Prompt nativo del navegador pidiendo usuario/contraseña al abrir Swagger | Falta el `permitAll()` de `/swagger-ui/**` y `/v3/api-docs/**` en el `SecurityFilterChain`, o el orden de las reglas está invertido | Los `permitAll()` van **antes** del `anyRequest().authenticated()` |
+| El jar no arranca fuera de Eclipse | Se corrió `mvn package` en vez de `clean package`, o quedó un jar viejo en `target/` | `mvn clean package` de nuevo antes de ejecutar |
 | El perfil no toma con `--spring.profiles.active=mysql` | El flag se puso antes de `-jar` en vez de después del nombre del jar | El flag va al final: `java -jar archivo.jar --spring.profiles.active=mysql` |
-| Postman sigue devolviendo `401` con Basic Auth cargado | Usuario o contraseña no coinciden con `InMemoryUserDetailsManager`, o falta el prefijo `{noop}` en el password | Revisar que las credenciales coincidan exactamente con las del bean |
+| Postman sigue devolviendo 401 con Basic Auth cargado | Usuario o contraseña no coinciden con el `InMemoryUserDetailsManager`, o falta el prefijo `{noop}` en el password | Revisar que las credenciales de Postman coincidan exactamente con las del bean |
 
-### Deudas que quedan a propósito (Clase 8)
+### Secuencia de prueba (Postman)
 
-| Problema | Se resuelve en |
-|---|---|
-| `LegajoDuplicadoException` sigue sin usarse en `AlumnoService.crear` | Pendiente de Clase 7, sigue abierto |
-| Usuario hardcodeado en memoria, sin sesión ni expiración | JWT |
+1. `GET /alumnos` **sin** Authorization cargado → **401 Unauthorized**.
+2. Cargar Authorization > Basic Auth > `admin` / `admin`. Repetir `GET /alumnos` → **200 OK** con el listado de siempre.
+3. Cambiar la contraseña a cualquier otra cosa y repetir → vuelve a dar **401** (para mostrar que valida contra el usuario real).
+4. `GET /v3/api-docs` **sin** ninguna autenticación → **200 OK** (tiene que seguir libre).
+5. Guardar en la collection dos variantes de `GET /alumnos`: una "sin auth" y otra "con Basic Auth" ya cargada, para no repetir el paso 2 en cada prueba en vivo.
+6. Si se dio Actuator: `GET /actuator/health` → `{"groups":["liveness","readiness"],"status":"UP"}`.
 
-## Próxima clase
+### Glosario final
 
-Cierre de curso. Frentes sugeridos para seguir por cuenta propia:
+`@Autowired` · `@Bean` · `@Entity` · `@Repository` · `@Service` · `cascade` · `ProblemDetail` · `RestClient` · `ddl-auto` · `@Tag` · `@Operation` · `@SecurityScheme` · `@SecurityRequirement` · `SecurityFilterChain` · `InMemoryUserDetailsManager` · `httpBasic()` · `liveness` / `readiness`
+
+### Hacia dónde seguir
 
 - **Testing**: JUnit 5, MockMvc, `@SpringBootTest`, Testcontainers.
-- **Seguridad**: de Basic Auth a JWT (resuelve expiración, sesión y distinguir usuarios, que Basic Auth no cubre).
+- **Seguridad**: de Basic Auth a JWT (resuelve lo que Basic Auth no cubre: expiración, sesión, distinguir usuarios).
 - **Docker**, despliegue, y un frontend que consuma la API.
+
+*Tag de cierre: `clase-8`. Repo: `github.com/fertw/spring-boot-educacionit`.*
